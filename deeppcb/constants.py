@@ -1,0 +1,1 @@
+LOW_INTENSITY = 5
