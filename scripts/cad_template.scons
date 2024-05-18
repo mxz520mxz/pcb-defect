@@ -1,0 +1,26 @@
+#!/usr/bin/env python
+import os
+import os.path as osp
+
+script_dir = osp.dirname(os.readlink('SConstruct'))
+import sys
+sys.path.insert(0, script_dir)
+
+from scons_base import *
+
+tool_dir = osp.join(script_dir, '../tools')
+
+env = Environment(ENV={'PATH': os.environ['PATH']})
+
+env.Command(["target_1x/segmaps", "target_2x/segmaps", 'cad_segmap_1x.png'], 'cad_image0', f"{tool_dir}/pcb_cad_parse.py --use_valid_mask=True $SOURCE .")
+# env.Command(["target_1x/segmaps", "target_2x/segmaps", 'cad_segmap_1x.png'], 'cad_image0', f"{tool_dir}/pcb_cad_parse.py $SOURCE . --no_valid_mask")
+env.Alias('parse_cad', ['target_1x/segmaps', 'target_2x/segmaps'])
+env.Command(f'cad_segmap_1x_color.jpg', f'cad_segmap_1x.png', f"{tool_dir}/pcb_draw_segmap.py $SOURCE -o $TARGET")
+
+for d in ['target_1x', 'target_2x']:
+    env.Command(f'{d}/segmaps_color', f'{d}/segmaps', f"{tool_dir}/pcb_draw_segmap.py $SOURCE -o $TARGET")
+    env.Command([f"{d}/distmaps", f"{d}/edges"], f'{d}/segmaps', f'{tool_dir}/pcb_calc_distmap.py $SOURCE $TARGETS --is_segmap')
+
+env.Alias('all', ['target_1x', 'target_2x', 'cad_segmap_1x_color.jpg'])
+
+#env.Command('clean', '', 'rm -rf cad_image_[12]x.png target_[12]x')

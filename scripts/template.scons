@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+import os
+import os.path as osp
+
+script_dir = osp.dirname(os.readlink('SConstruct'))
+import sys
+sys.path.insert(0, script_dir)
+
+from scons_base import *
+
+tool_dir = osp.join(script_dir, '../tools')
+
+env = Environment(ENV={'PATH': os.environ['PATH']})
+
+env.Command("name_mapping.txt", "images0", f"{tool_dir}/sort_image_names.py $SOURCE > $TARGET")
+
+env.Command('vcrop.json', ['annotations/segmap_layers/bg', 'name_mapping.txt'],
+            f'{tool_dir}/pcb_golden_calc_vcrop.py $SOURCE $TARGET')
+
+# images
+env.Command("images_orig", ["images0", "vcrop.json", "name_mapping.txt"],
+            f'{tool_dir}/pcb_golden_crop_image.py $SOURCE $TARGET')
+env.Command('target_align/images', "images_orig", f"{tool_dir}/resize_img.py -s {ALIGN_WIDTH}x $SOURCE $TARGET")
+env.Command('images_stitch', "target_align/images", f"{tool_dir}/resize_img.py -s {STITCH_WIDTH}x $SOURCE $TARGET")
+env.Command('images_icon', "images_stitch", f"{tool_dir}/resize_img.py -s {ICON_WIDTH}x $SOURCE $TARGET")
+
+# distmaps
+env.Command("distmaps_orig", 'images_orig', f'{tool_dir}/pcb_calc_distmap.py $SOURCE $TARGET edges_orig')
+env.Command("target_align/distmaps", 'target_align/images', f'{tool_dir}/pcb_calc_distmap.py $SOURCE $TARGET target_align/edges')
+
+env.Alias('distmaps', ['distmaps_orig', 'target_align/distmaps'])
+
+# segmaps
+env.Command("segmaps_orig", ["annotations/segmap_layers", 'vcrop.json', 'name_mapping.txt'],
+            f'{tool_dir}/pcb_merge_segmap_layers.py $SOURCE $TARGET')
+env.Command("target_align/segmaps", 'segmaps_orig', f'{tool_dir}/resize_img.py -s {ALIGN_WIDTH}x --order=nearest $SOURCE $TARGET')
+env.Command("segmaps_stitch", 'target_align/segmaps', f'{tool_dir}/resize_img.py -s {STITCH_WIDTH}x --order=nearest $SOURCE $TARGET')
+
+# patterns
+env.Command('patterns_orig', ["annotations/patterns", 'vcrop.json', 'name_mapping.txt'],
+            f'{tool_dir}/pcb_golden_merge_patterns.py $SOURCE $TARGET')
+env.Command("target_align/patterns", 'patterns_orig', f'{tool_dir}/resize_img.py -s {ALIGN_WIDTH}x --ext=.png --order=nearest $SOURCE $TARGET')
+env.Command("patterns_stitch", 'target_align/patterns', f'{tool_dir}/resize_img.py -s {STITCH_WIDTH}x --ext=.png --order=nearest $SOURCE $TARGET')
+
+env.Alias('all_align', ['target_align/images', 'target_align/segmaps', 'target_align/patterns', 'target_align/distmaps'])
+env.Alias('all_stitch', ['images_stitch', 'segmaps_stitch', 'patterns_stitch'])
+
+## stitch_masks
+env.Command("stitch_masks_orig", ["annotations/stitch_masks", "vcrop.json", "name_mapping.txt"], f'{tool_dir}/pcb_golden_crop_image.py $SOURCE $TARGET')
+env.Command('stitch_masks', 'stitch_masks_orig', f'{tool_dir}/resize_img.py -s {STITCH_WIDTH}x $SOURCE $TARGET')
+
+env.Command('target_align/align_region.json', 'target_align/segmaps', f'{tool_dir}/pcb_golden_calc_align_region.py $SOURCE $TARGET')
+# env.Command('target_align/gmm_segmaps', ['target_align/images', 'target_align/segmaps'], f'{tool_dir}/pcb_golden_gmm_seg.py $SOURCES $TARGET')
+
+env.Command('stitched/Ts.json', ['images_stitch', 'images_orig'], f'{tool_dir}/pcb_golden_stitch_by_annotation.py --verify $SOURCES stitched')
+env.Command('stitched/stitched_segmap.png', ['stitched/Ts.json', 'segmaps_stitch'], f'{tool_dir}/pcb_apply_stitch.py --order=nearest --fusion=overlap --tform=$SOURCES $TARGET')
+env.Command('stitched/patterns', ['stitched/Ts.json', 'patterns_stitch'], f'{tool_dir}/pcb_golden_stitch_patterns.py --tform=$SOURCES $TARGET/{{pattern}}.png')
+env.Command('stitched/cells.json', ['stitched/Ts.json', 'stitched/patterns'], f'{tool_dir}/pcb_golden_parse_cells.py --tform=$SOURCE -o $TARGET')
+
+env.Command('golden_cell/segmaps', ['stitched/cells.json', 'stitched/patterns'], f'{tool_dir}/pcb_golden_cut_pattern_cell.py --scale={WIDTH0/STITCH_WIDTH} $SOURCES $TARGET')
+
+env.Command('golden_cell/segmaps_color', 'golden_cell/segmaps', f'{tool_dir}/pcb_draw_segmap.py $SOURCE -o $TARGET')
+
+env.Command('golden_cell/distmaps', 'golden_cell/segmaps', f'{tool_dir}/pcb_calc_distmap.py --is_segmap $SOURCE $TARGETS golden_cell/edges')
+
+# for tp, order in [
+#         ('images', 'linear'),
+#         ('segmaps', 'nearest'),
+#         ('distmaps', 'nearest'),
+#         ('edges', 'nearest'),
+# ]:
+#     env.Command(f'cells/{tp}', ['stitched/cells.json', f'{tp}_orig'], f'{tool_dir}/pcb_golden_cut_cells.py --order={order} --cells $SOURCES $TARGET')
+
+# env.Command('patches/patches.pkl', 'cells/segmaps', f'{tool_dir}/pcb_golden_parse_patches.py $SOURCE $TARGET')
+
+# for tp in ['distmaps', 'edges', 'images', 'segmaps']:
+#     env.Command(f'patches/{tp}', ['patches/patches.pkl', f'cells/{tp}'], f'{tool_dir}/pcb_golden_cut_patches.py --patches $SOURCES $TARGET')
+
+env.Command('clean', '','rm -rf cache stitched verify cells')
+
+env.Command('clean_all', '', 'scons clean; rm -rf *_stitch *_align *_orig images_icon *cells vcrop.json name_mapping.txt patches')
+
+env.Alias('all', ['golden_cell', 'target_align', 'distmaps_orig'])
+env.Default('all')
+
+# for test
+# env.Command('cut_cells_segmaps', 'stitched/cells.json', f'{tool_dir}/pcb_cut_cells.py --order=0 --cells $SOURCE segmaps_orig cells/{{pat}}/segmaps')
+# env.AlwaysBuild('cut_cells_segmaps')

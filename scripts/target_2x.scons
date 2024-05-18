@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+import os
+import os.path as osp
+import sys
+
+script_dir = osp.dirname(os.readlink('SConstruct'))
+import sys
+sys.path.insert(0, script_dir)
+
+from scons_base import *
+
+tool_dir = osp.join(script_dir, '../tools')
+
+env = Environment(ENV={'PATH': os.environ['PATH']})
+
+env.Command('images1', 'images0', f"{tool_dir}/resize_img.py -s0.5x $SOURCE $TARGET")
+
+env.Command('cropped_images1', 'images1', f"{tool_dir}/pcb_target_preproc_image.py --templates=templates/{{board}}/target_2x list.txt $SOURCE $TARGET")
+
+env.Command('orig_images_2x', 'cropped_images1', f'{tool_dir}/pcb_target_bilateral_filter.py --zoom=2 $SOURCE $TARGET')
+
+env.Command(['transforms','images_2x'], ['list.txt', 'orig_images_2x'], f'{tool_dir}/pcb_target_align_camera.py $SOURCES $TARGETS --templates=templates/{{board}}/target_2x --verify=verify_aligned_images')
+
+env.Command('segmaps_2x', ['images_2x'], f'{tool_dir}/pcb_target_gmm_seg.py $SOURCES $TARGET')
+env.Command('segmaps_2x_color', ['segmaps_2x'], f'{tool_dir}/pcb_draw_segmap.py $SOURCES -o $TARGET')
+
+env.Command('ood_segmaps_2x', ['list.txt', 'images_2x', 'segmaps_2x'], f'{tool_dir}/pcb_target_ood_seg.py --templates=templates/{{board}}/target_2x $SOURCES --verify=verify_gmm $TARGET')
+env.Command('ood_segmaps_2x_color', ['ood_segmaps_2x'], f'{tool_dir}/pcb_draw_segmap.py $SOURCES -o $TARGET')
+
+env.Alias('verify_segmaps', ['segmaps_2x_color', 'ood_segmaps_2x_color'])
+
+env.Command('foreigns', ['images_2x', 'ood_segmaps_2x'], f'{tool_dir}/pcb_target_detect_defect_foreign.py --verify=verify_foreigns --zoom=2 $SOURCES $TARGET')
+
+env.Command('deviations', ['segmaps_2x'], f'{tool_dir}/pcb_target_detect_defect_deviation.py --templates=templates/{{board}}/target_2x --verify=verify_deviations --zoom=2 $SOURCES $TARGET')
+
+# env.Command('cells/segmaps', 'trans_segmaps_orig', f'{tool_dir}/pcb_target_cut_cells.py --order=nearest --out_tform=cells/transforms list.txt $SOURCE $TARGET')
+# env.Command('aligned_cells/transforms', ['cells/transforms', 'cells/segmaps'], f'{tool_dir}/pcb_target_align_cell.py $SOURCES $TARGET --verify aligned_cells/verify_align')
+
+# for src, dst, order in [
+#         ('trans_images_orig', 'aligned_cells/images', 'linear'),
+#         ('trans_segmaps_orig', 'aligned_cells/segmaps', 'nearest'),
+#         ('trans_segmaps_orig_color', 'aligned_cells/segmaps_color', 'nearest'),
+# ]:
+#     env.Command(dst, src, f'{tool_dir}/pcb_target_apply_cell_cuttings.py --order={order} aligned_cells/transforms $SOURCE $TARGET')
+
+# env.Command('cells/contours', 'cells/segmaps', f'{tool_dir}/pcb_extract_contour.py --verify=cells/contours_color $SOURCE $TARGET')
+
+# for folder in ['images', 'segmaps', 'segmaps_color']:
+#     env.Command(f'patches/{folder}', f'cells/{folder}', f'{tool_dir}/pcb_target_cut_patches.py cells/images $SOURCE $TARGET')
+
+# env.Command('aligned_patch_images', 'patches/images', f'{tool_dir}/pcb_target_align_patch.py --sim_no_scale $SOURCE $TARGET')
+
+# env.Alias('cut_patch', 'patch_images')
+
+# env.Command('verify_patches', ['patch_images', 'aligned_patch_images'], f'{tool_dir}/pcb_target_verify_patch_image.py $SOURCES $TARGET')
+# env.AlwaysBuild('verify_patches')
+
+# env.Command('verify_patch_coverage', 'patch_images', f'{tool_dir}/pcb_target_verify_patch_coverage.py $SOURCE $TARGET')
+# env.AlwaysBuild('verify_patch_coverage')
+
+# env.Alias('all', ['images_align', 'align.json', 'aligned_images', 'cells', 'cut_patch'])
+env.Command('clean', '', 'rm -rf images1 cropped_images* *_[12]x verify* align.json trans_* *patch* cells transforms gmm foreigns')
+env.Command('clear_gmm', '', 'rm -rf gmm *segmaps* *foreigns*')
