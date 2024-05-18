@@ -1,0 +1,327 @@
+[base]
+division=16
+width0 = 8320
+align_scale = 0.5
+align_width = 4160
+stitch_width = 4160
+
+icon_width = 512
+
+[golden.stitch]
+moving_hgap = 0.003
+moving_vgap = [0.1, 0.1]
+
+ref_cam = 0
+cam_names = [0, 1, 2, 3, 4]
+cam_pairs = [[0, 1], [1, 2], [2, 3], [3, 4]]
+
+tform_tp = 'affine'
+align_method = 'edge_align'
+# align_method = 'opencv_ecc'
+[golden.stitch.edge_align]
+sim_no_scale = true
+optim = 'adam'
+lr = 3e-3
+max_patience = 20
+H_sy_pix = 3
+H_sx_pix = 3
+
+#[classes.blank]
+#label = 0
+#color = [0, 0, 0]
+#
+#[classes.bg]
+#label = 1
+#color = [0, 100, 0]
+#
+#[classes.copper]
+#label = 2
+#color = [184, 115, 51] # B87333
+#
+#[classes.wl_bg]
+#label = 4
+#color = [50, 150, 50]
+#
+#[classes.wl_copper]
+#label = 8
+#color = [234, 165, 101] # B87333
+#
+#[classes.bg_shadow]
+#label = 16
+#color = [50, 40, 30]
+
+[classes.blank]
+label = 0
+color = [0, 0, 0]
+
+[classes.bg]
+label = 1
+color = [255, 255, 255]
+
+[classes.copper]
+label = 2
+color = [0, 0, 0] # B87333暗铜
+
+[classes.wl_bg]
+label = 4
+color = [255, 255, 255]
+
+[classes.wl_copper]
+label = 8
+color = [0, 0, 0] # B87333亮铜
+
+[classes.bg_shadow]
+label = 16
+color = [50, 40, 30]
+
+
+# [classes.ignore]
+# label = 64
+# color = [128, 128, 128]
+
+[pattern.border_points]
+label = 1
+color = [255, 0, 0]
+extend = 16
+extend_label = 2
+
+[pattern.copper]
+label = 4
+color = [184, 115, 51] # B87333
+extend = 16
+extend_label = 8
+
+[pattern.roi]
+label = 16
+color = [0, 100, 0]
+
+[pattern.match_region]
+label = 32
+color = [0, 0, 255] # B87333
+
+[pattern_colors]
+pattern0 = [255, 0, 0]
+pattern1 = [0, 255, 0]
+pattern2 = [0, 0, 255]
+
+### for target image
+[target]
+base_dpi = 1400
+
+[target.cam_mapping]
+cam1 = 'A0'
+cam2 = 'A1'
+cam3 = 'A2'
+cam4 = 'A3'
+cam5 = 'A4'
+cam6 = 'B0'
+cam7 = 'B1'
+cam8 = 'B2'
+cam9 = 'B3'
+cam10 = 'B4'
+
+[target.crop]
+edge_scale = 0.5
+
+[target.filter]
+d.1x = 7
+d.2x = 3
+sigma_color = 10
+sigma_space.1x = 7
+sigma_space.2x = 3
+
+[target.align_camera]
+tform_tp = 'projective'
+padding = 128
+
+[target.align_camera.edge_align]
+optim='adam'
+lr = 3e-3
+max_patience = 20
+max_iters = 500
+
+[target.gmm_seg]
+feature = ['lab.*']
+sample_nr = 2000
+blank_border_width = 1
+random_seed = 7
+
+[target.ood_seg.copper]
+feature = ['lab.*']
+segmap_shrink = 2
+edge_region_radius = 4
+random_seed = 7
+
+sample_nr.all = 2000
+sample_nr.edge = 2000
+
+dist_th = 100
+support_frac = 0.75 # constrol sensitivity, higher more sensitive
+
+[target.ood_seg.bg]
+feature = ['lab.*']
+segmap_shrink = 2
+edge_region_radius = 4
+random_seed = 7
+
+sample_nr.all = 2000
+sample_nr.edge = 2000
+sample_nr.shadow = 1000
+
+dist_th = 80
+support_frac = 0.75 # constrol sensitivity, higher more sensitive
+
+[target.align_cell]
+valid_margin = 3
+min_len = 5
+tform = 'affine'
+sim_no_scale = true
+lr = 3e-4
+max_patience = 20
+max_iters = 200
+
+[foreign]
+crop_border = 32
+copper_margin = 3
+bg_margin = 3
+
+[foreign.cluster]
+cluster_dist=48
+nn_k=16
+max_edge_points=20
+
+[foreign.inland_sea]
+level = 'black'
+located = 'copper'
+max_area = 150
+min_area = 5
+method = 'floodfill'
+surr_radius = 20
+floodfill_tol = 5
+
+label = 32
+color = [148,0,211]
+
+[foreign.insea_land]
+level = 'black'
+located = 'bg'
+
+max_area = 150
+min_area = 5
+method = 'floodfill'
+surr_radius = 20
+floodfill_tol = 5
+
+label = 48
+color = [148,0,211]
+
+[foreign.deep_water]
+level = 'black'
+located = 'copper'
+
+min_intensity_var = 30
+min_rb_var = 10
+surr_radius = 2
+seed_mode = 'dark_gray'
+
+label = 64
+color = [0, 0, 255]
+
+[foreign.high_sand]
+level = 'black'
+located = 'bg'
+
+min_intensity_var = 30
+min_rb_var = 10
+surr_radius = 2
+seed_mode = 'light'
+
+label = 80
+color = [0, 0, 255]
+
+[foreign.shallow_water]
+level = 'white'
+located = 'copper'
+
+max_intensity_range = 20
+surr_radius = 10
+method = 'floodfill'
+floodfill_tol = 4
+seed_mode = 'dark'
+fill_max_factor = 0.2
+
+label = 96
+color = [255, 255, 0]
+
+[foreign.shallow_sand]
+level = 'white'
+located = 'bg'
+max_intensity_range = 20
+surr_radius = 10
+method = 'floodfill'
+floodfill_tol = 4
+seed_mode = 'light'
+fill_max_factor = 0.2
+
+label = 112
+color = [255, 255, 0]
+
+[foreign.small_pond]
+level = 'white'
+located = 'copper'
+
+max_area = 4
+
+label = 128
+color = [255, 255, 255]
+
+[foreign.small_reef]
+level = 'white'
+located = 'bg'
+
+max_area = 4
+label = 144
+color = [255, 255, 255]
+
+[foreign.copper_cand]
+level = 'gray'
+located = 'copper'
+
+label = 160
+color = [128, 128, 128]
+
+[foreign.bg_cand]
+level = 'gray'
+located = 'bg'
+
+label = 176
+color = [128, 128, 128]
+
+[deviation]
+border_gap = 8
+align_contour_margin = 20
+connect_len = 4
+coarse_far_dist_th = 15
+coarse_far_ratio = 0.8
+coarse_near_dist_th = 4
+
+strict_dist_th = 4
+strict_ratio = 0.8
+
+refine_margin = 32
+refine_dist_th = 3
+
+[deviation.concave]
+label = 192
+located = 'copper'
+color = [255, 0, 0]
+
+[deviation.convex]
+label = 208
+located = 'bg'
+color = [255, 192, 203]
+
+[deviation.cluster]
+cluster_dist=48
+nn_k=16
+max_edge_points=20
